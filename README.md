@@ -187,9 +187,8 @@ GOOGLE_CLIENT_SECRET=your_google_client_secret
 
 ## 📸 Screenshots
 
-| Home Catalog | Seat Selection |
-| :---: | :---: |
-| ![Home Catalog](frontend/public/CineSpot.png) | ![Seat Plan](frontend/public/CineSpot.png) |
+### 🎬 CineSpot Frontend Application Catalog & Interface
+![CineSpot Frontend Application UI](frontend/public/cinespot_frontend_ui.png)
 
 ---
 
