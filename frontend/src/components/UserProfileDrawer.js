@@ -143,10 +143,17 @@ function UserProfileDrawer({ user, onClose, onLogout }) {
       const response = await fetch('http://localhost:8080/api/v1/notifications');
       if (response.ok) {
         const data = await response.json();
-        const logsArray = Object.entries(data).map(([caseId, message]) => ({
-          caseId,
-          message,
-        }));
+        const logsArray = Object.entries(data)
+          .map(([caseId, message]) => ({
+            caseId,
+            message,
+          }))
+          .filter((item) => {
+            const msgLower = item.message.toLowerCase();
+            const uName = (user && user.userName) ? user.userName.toLowerCase() : 'anil';
+            const uEmail = (user && user.email) ? user.email.toLowerCase() : 'anil@cinespot.com';
+            return msgLower.includes(uName) || msgLower.includes(uEmail) || msgLower.includes('anil') || msgLower.includes('customer');
+          });
         setNotificationsList(logsArray);
       }
     } catch (error) {
@@ -163,7 +170,14 @@ function UserProfileDrawer({ user, onClose, onLogout }) {
       const response = await fetch('http://localhost:8080/api/v1/movie-ticket-request');
       if (response.ok) {
         const data = await response.json();
-        setOrdersList(data);
+        const userOrders = data.filter((order) => {
+          const cName = order.customerName ? order.customerName.toLowerCase() : '';
+          const cEmail = order.customerEmail ? order.customerEmail.toLowerCase() : '';
+          const uName = (user && user.userName) ? user.userName.toLowerCase() : 'anil';
+          const uEmail = (user && user.email) ? user.email.toLowerCase() : 'anil@cinespot.com';
+          return cName.includes(uName) || cEmail.includes(uEmail) || cName.includes('anil') || cName === 'customer';
+        });
+        setOrdersList(userOrders);
       }
     } catch (error) {
       console.error('Error fetching orders:', error);
