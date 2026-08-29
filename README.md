@@ -186,7 +186,7 @@ REACT_APP_BASE_URL=http://localhost:8080/api/v1
 ## 📸 Screenshots
 
 ### 🎬 CineSpot Frontend Application Interface & Catalog
-![CineSpot Frontend Application UI](frontend/public/CineSpot%20copy.png)
+![CineSpot Frontend Application UI](frontend/public/cinespot_frontend_ui.png)
 
 ---
 
