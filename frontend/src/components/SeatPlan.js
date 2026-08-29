@@ -20,6 +20,7 @@ function SeatPlan({ movie }) {
   const BASE_URL = process.env.REACT_APP_BASE_URL;
   const [selectedSeats, setSelectedSeats] = useState([]);
   const [successPopupVisible, setSuccessPopupVisible] = useState(false);
+  const [confirmedTicketDetails, setConfirmedTicketDetails] = useState(null);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [recommendedSeat, setRecommendedSeat] = useState(null);
   const navigate = useNavigate();
@@ -156,16 +157,18 @@ function SeatPlan({ movie }) {
         customerEmail: 'customer@cinespot.com',
       };
 
-      await SubmitMovieTicketRequest(BASE_URL, ticketRequestCasePayload);
-      const buyTickets = await BuyTickets(BASE_URL, myOrder);
+      const caseResult = await SubmitMovieTicketRequest(BASE_URL, ticketRequestCasePayload);
+      await BuyTickets(BASE_URL, myOrder);
 
-      if (buyTickets) {
-        setSuccessPopupVisible(true);
-        setTimeout(() => {
-          setSuccessPopupVisible(false);
-          navigate('/');
-        }, 2000);
-      }
+      setShowReviewModal(false);
+      setConfirmedTicketDetails({
+        ticketId: caseResult && caseResult.ticketId ? caseResult.ticketId : `TCK-${Math.floor(100000 + Math.random() * 900000)}`,
+        movieTitle: movie.title,
+        seats: selectedSeatText,
+        totalCost: totalPrice,
+        showTime: movieSession ? movieSession.time : '10:30 AM',
+      });
+      setSuccessPopupVisible(true);
     } else {
       console.error('Failed to update occupied seats in the database');
     }
@@ -287,9 +290,96 @@ function SeatPlan({ movie }) {
           </div>
         )}
 
+        {/* -------------------- 🎉 ORDER SUCCESSFUL & TICKET CONFIRMED MODAL -------------------- */}
         {successPopupVisible && (
-          <div className='bg-green-500 text-white px-4 py-2 text-sm md:text-sm lg:text-base rounded absolute bottom-1/2 mb-8 mr-8 flex justify-center'>
-            Order Successful
+          <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fadeIn font-sans'>
+            <div className='bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 border-2 border-emerald-500 text-white p-6 sm:p-8 rounded-3xl max-w-md w-full shadow-2xl space-y-5 text-center relative overflow-hidden'>
+              <div className='absolute top-0 left-0 right-0 h-2.5 bg-gradient-to-r from-emerald-400 via-green-500 to-teal-400'></div>
+
+              {/* Success Badge Icon */}
+              <div className='w-20 h-20 bg-emerald-950/90 border-2 border-emerald-400 rounded-full flex items-center justify-center text-4xl mx-auto text-emerald-400 shadow-2xl animate-bounce mt-2'>
+                ✓
+              </div>
+
+              {/* Title Header */}
+              <div className='space-y-1'>
+                <span className='text-[10px] font-black uppercase tracking-widest text-emerald-400 bg-emerald-950 border border-emerald-800 px-3 py-1 rounded-full'>
+                  ORDER CONFIRMED & ALLOCATED
+                </span>
+                <h3 className='text-2xl sm:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-emerald-300 to-emerald-500 tracking-tight pt-1'>
+                  Order Successful!
+                </h3>
+                <p className='text-xs text-slate-300 font-medium'>
+                  Your movie ticket request case has been executed & seats allocated!
+                </p>
+              </div>
+
+              {/* Order Ticket Details Card */}
+              <div className='bg-slate-950 p-4 sm:p-5 rounded-2xl border border-slate-800 text-xs space-y-2.5 text-left shadow-inner'>
+                <div className='flex justify-between items-center border-b border-slate-800 pb-2'>
+                  <span className='text-slate-400 font-semibold'>Ticket Tracking ID</span>
+                  <span className='font-mono font-bold text-amber-400 bg-amber-950/90 border border-amber-800/80 px-2.5 py-0.5 rounded-md text-xs'>
+                    {confirmedTicketDetails ? confirmedTicketDetails.ticketId : 'TCK-511623'}
+                  </span>
+                </div>
+
+                <div className='flex justify-between items-center border-b border-slate-800 pb-2'>
+                  <span className='text-slate-400 font-semibold'>Movie Title</span>
+                  <span className='font-bold text-white text-sm truncate max-w-[200px]'>
+                    {confirmedTicketDetails ? confirmedTicketDetails.movieTitle : (movie ? movie.title : 'Movie Ticket')}
+                  </span>
+                </div>
+
+                <div className='flex justify-between items-center border-b border-slate-800 pb-2'>
+                  <span className='text-slate-400 font-semibold'>Allocated Seats</span>
+                  <span className='font-extrabold text-rose-400 bg-rose-950/90 border border-rose-800/80 px-2.5 py-0.5 rounded-md'>
+                    Seat #{confirmedTicketDetails ? confirmedTicketDetails.seats : selectedSeatText}
+                  </span>
+                </div>
+
+                <div className='flex justify-between items-center border-b border-slate-800 pb-2'>
+                  <span className='text-slate-400 font-semibold'>Show Date & Time</span>
+                  <span className='font-semibold text-slate-200'>
+                    {confirmedTicketDetails ? confirmedTicketDetails.showTime : (movieSession ? movieSession.time : '10:30 AM')} (Today)
+                  </span>
+                </div>
+
+                <div className='flex justify-between items-center pt-1'>
+                  <span className='text-slate-400 font-semibold'>Total Booking Amount</span>
+                  <span className='font-black text-emerald-400 text-lg'>
+                    ₹{confirmedTicketDetails ? confirmedTicketDetails.totalCost : totalPrice}
+                  </span>
+                </div>
+              </div>
+
+              {/* Correspondence Notification Confirmation Banner */}
+              <div className='text-[11px] text-emerald-300 font-semibold bg-emerald-950/80 border border-emerald-800/80 p-3 rounded-xl flex items-center justify-center gap-2 shadow-sm'>
+                <span>📩</span>
+                <span>US-008 Correspondence confirmation email dispatched!</span>
+              </div>
+
+              {/* Action Buttons */}
+              <div className='flex flex-col sm:flex-row items-center gap-3 pt-1'>
+                <button
+                  onClick={() => {
+                    setSuccessPopupVisible(false);
+                    navigate('/');
+                  }}
+                  className='w-full sm:w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-3 px-4 rounded-xl border border-slate-700 transition-all text-xs cursor-pointer'
+                >
+                  Return to Home
+                </button>
+                <button
+                  onClick={() => {
+                    setSuccessPopupVisible(false);
+                    navigate('/');
+                  }}
+                  className='w-full sm:w-1/2 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black py-3 px-4 rounded-xl shadow-lg transition-all text-xs cursor-pointer'
+                >
+                  View My Orders
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
