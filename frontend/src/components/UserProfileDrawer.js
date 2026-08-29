@@ -153,7 +153,8 @@ function UserProfileDrawer({ user, onClose, onLogout }) {
             const uName = (user && user.userName) ? user.userName.toLowerCase() : 'anil';
             const uEmail = (user && user.email) ? user.email.toLowerCase() : 'anil@cinespot.com';
             return msgLower.includes(uName) || msgLower.includes(uEmail) || msgLower.includes('anil') || msgLower.includes('customer');
-          });
+          })
+          .sort((a, b) => Number(b.caseId) - Number(a.caseId));
         setNotificationsList(logsArray);
       }
     } catch (error) {
@@ -170,13 +171,15 @@ function UserProfileDrawer({ user, onClose, onLogout }) {
       const response = await fetch('http://localhost:8080/api/v1/movie-ticket-request');
       if (response.ok) {
         const data = await response.json();
-        const userOrders = data.filter((order) => {
-          const cName = order.customerName ? order.customerName.toLowerCase() : '';
-          const cEmail = order.customerEmail ? order.customerEmail.toLowerCase() : '';
-          const uName = (user && user.userName) ? user.userName.toLowerCase() : 'anil';
-          const uEmail = (user && user.email) ? user.email.toLowerCase() : 'anil@cinespot.com';
-          return cName.includes(uName) || cEmail.includes(uEmail) || cName.includes('anil') || cName === 'customer';
-        });
+        const userOrders = data
+          .filter((order) => {
+            const cName = order.customerName ? order.customerName.toLowerCase() : '';
+            const cEmail = order.customerEmail ? order.customerEmail.toLowerCase() : '';
+            const uName = (user && user.userName) ? user.userName.toLowerCase() : 'anil';
+            const uEmail = (user && user.email) ? user.email.toLowerCase() : 'anil@cinespot.com';
+            return cName.includes(uName) || cEmail.includes(uEmail) || cName.includes('anil') || cName === 'customer';
+          })
+          .sort((a, b) => Number(b.caseId) - Number(a.caseId));
         setOrdersList(userOrders);
       }
     } catch (error) {
