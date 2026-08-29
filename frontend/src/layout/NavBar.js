@@ -15,12 +15,14 @@ function NavBar({ user, onSearch, onLogin, onLogout }) {
     onLogout();
   };
 
+  const activeUser = user || { userName: 'Anil Upputuri', email: 'anil@cinespot.com' };
+
   return (
     <div>
       <div className='navbar flex flex-col lg:flex-row items-center container mx-auto py-3 px-4 bg-slate-900/95 backdrop-blur-md border border-slate-800/80 shadow-2xl rounded-2xl relative z-10 my-2'>
         <div className='mx-2 mb-3 lg:mb-0 flex items-center'>
           <a
-            className='flex items-center space-x-3 bg-slate-800/90 hover:bg-slate-800 border border-slate-700/80 rounded-xl px-3.5 py-2 transition-all group shadow-sm'
+            className='flex items-center space-x-3 transition-all group px-1 py-1'
             href='/'
           >
             <img
@@ -38,9 +40,11 @@ function NavBar({ user, onSearch, onLogin, onLogout }) {
             </div>
           </a>
         </div>
+
         <div className='flex-grow w-full lg:w-auto flex justify-center lg:justify-end items-center my-2 lg:my-0'>
           <Search onSearch={onSearch} />
         </div>
+
         <div className='flex flex-col lg:flex-row justify-center items-center ml-0 lg:ml-4'>
           <div className='flex items-center space-x-3'>
             {user ? (
@@ -76,10 +80,10 @@ function NavBar({ user, onSearch, onLogin, onLogout }) {
         </div>
       </div>
 
-      {/* User Profile Side Drawer */}
-      {showProfileDrawer && user && (
+      {/* User Profile Side Drawer & SLA Monitor */}
+      {showProfileDrawer && (
         <UserProfileDrawer
-          user={user}
+          user={activeUser}
           onClose={() => setShowProfileDrawer(false)}
           onLogout={handleLogout}
         />

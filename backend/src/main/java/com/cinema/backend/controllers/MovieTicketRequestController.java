@@ -8,6 +8,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -82,27 +84,81 @@ public class MovieTicketRequestController {
         // US-004: Customer Approval
         request.setBookingStatus("CONFIRMED");
 
-        // Booking Execution Stage: Allocate seats, generate Ticket ID, & update Booking
-        // Confirmation Status
-        String generatedTicketId = "TCK-" + (100000 + (int) (Math.random() * 900000));
-        String formattedSeats = request.getSelectedSeats() != null
-                ? request.getSelectedSeats().toString().replaceAll("[\\[\\]]", "")
-                : "Allocated Seats";
-
-        request.setStage("Booking Execution");
-        request.setTicketId(generatedTicketId);
-        request.setSeatNumbers(formattedSeats);
-        request.setBookingConfirmationStatus("ALLOCATED_AND_CONFIRMED");
-        request.setStatus("BOOKED_AND_COMPLETED");
+        // Booking Execution Stage: Allocate seats, generate Ticket ID, & update Booking Confirmation Status
+        executeBookingStage(request);
 
         // Save Case Type Instance to Database
         MovieTicketRequest savedCase = requestRepository.save(request);
 
-        // Trigger Correspondence Notification Rule to Customer Persona upon case
-        // resolution
+        // Trigger Correspondence Notification Rule to Customer Persona upon case resolution
         correspondenceService.generateAndSendConfirmationNotification(savedCase);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(savedCase);
+    }
+
+    /**
+     * Booking Execution Stage Endpoint:
+     * Handles final booking activities including seat allocation, updating booking status,
+     * maintaining Booking Confirmation Status, Seat Numbers, and Ticket ID within the case entity.
+     */
+    @PutMapping("/{id}/execute-booking")
+    public ResponseEntity<?> executeBookingStageForCase(@PathVariable Long id, @RequestBody(required = false) Map<String, Object> payload) {
+        Optional<MovieTicketRequest> requestOptional = requestRepository.findById(id);
+        if (requestOptional.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "Movie Ticket Request case not found for ID " + id));
+        }
+
+        MovieTicketRequest caseInstance = requestOptional.get();
+        executeBookingStage(caseInstance);
+        MovieTicketRequest updatedCase = requestRepository.save(caseInstance);
+
+        correspondenceService.generateAndSendConfirmationNotification(updatedCase);
+
+        return ResponseEntity.ok(Map.of(
+                "message", "Booking Execution Stage completed successfully.",
+                "caseId", updatedCase.getCaseId(),
+                "stage", updatedCase.getStage(),
+                "ticketId", updatedCase.getTicketId(),
+                "bookingConfirmationStatus", updatedCase.getBookingConfirmationStatus(),
+                "seatNumbers", updatedCase.getSeatNumbers(),
+                "bookingStatus", updatedCase.getBookingStatus(),
+                "status", updatedCase.getStatus()
+        ));
+    }
+
+    private void executeBookingStage(MovieTicketRequest request) {
+        request.setStage("Booking Execution");
+        request.setBookingStatus("CONFIRMED");
+        request.routeWorkQueue();
+
+        // Format seat numbers for final allocation
+        String formattedSeats;
+        if (request.getSelectedSeats() != null && !request.getSelectedSeats().isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < request.getSelectedSeats().size(); i++) {
+                sb.append("Seat ").append(request.getSelectedSeats().get(i) + 1);
+                if (i < request.getSelectedSeats().size() - 1) {
+                    sb.append(", ");
+                }
+            }
+            formattedSeats = sb.toString();
+        } else if (request.getSeatNumbers() != null && !request.getSeatNumbers().trim().isEmpty()) {
+            formattedSeats = request.getSeatNumbers();
+        } else {
+            formattedSeats = "Allocated Seats";
+        }
+        request.setSeatNumbers(formattedSeats);
+
+        // Generate unique Ticket ID
+        if (request.getTicketId() == null || request.getTicketId().trim().isEmpty()) {
+            String ticketId = "TCK-" + (100000 + (int)(Math.random() * 900000));
+            request.setTicketId(ticketId);
+        }
+
+        // Set Booking Confirmation Status & final Case Status
+        request.setBookingConfirmationStatus("CONFIRMED_AND_ALLOCATED");
+        request.setStatus("BOOKED_AND_COMPLETED");
     }
 
     /**
@@ -127,16 +183,23 @@ public class MovieTicketRequestController {
 
         if ("CONFIRMED".equals(customerDecision)) {
             caseInstance.setStatus("CONFIRMED");
-            // Proceed to ticket processing stage
+            // Proceed to Booking Execution stage
+            executeBookingStage(caseInstance);
             MovieTicketRequest updatedCase = requestRepository.save(caseInstance);
+            correspondenceService.generateAndSendConfirmationNotification(updatedCase);
+
             return ResponseEntity.ok(Map.of(
-                    "message", "Customer approved booking request. Proceeding to ticket processing.",
+                    "message", "Customer approved booking request. Booking Execution stage completed.",
                     "caseId", updatedCase.getCaseId(),
                     "stage", updatedCase.getStage(),
+                    "ticketId", updatedCase.getTicketId(),
+                    "bookingConfirmationStatus", updatedCase.getBookingConfirmationStatus(),
+                    "seatNumbers", updatedCase.getSeatNumbers(),
                     "bookingStatus", updatedCase.getBookingStatus(),
                     "status", updatedCase.getStatus()));
         } else {
             caseInstance.setStatus("RESOLVED_CANCELLED");
+            caseInstance.setBookingConfirmationStatus("CANCELLED");
             // Resolved appropriately without further action
             MovieTicketRequest updatedCase = requestRepository.save(caseInstance);
             return ResponseEntity.ok(Map.of(
@@ -149,11 +212,45 @@ public class MovieTicketRequestController {
         }
     }
 
+    /**
+     * US-009: Fetch Booking SLA details for a Movie Ticket Request case
+     * Goal: 1 day, Deadline: 2 days. Evaluates goal missed (approaching deadline)
+     * and deadline missed (automatic priority increase).
+     */
+    @GetMapping("/{id}/sla")
+    public ResponseEntity<?> getCaseSlaDetails(@PathVariable Long id) {
+        Optional<MovieTicketRequest> requestOptional = requestRepository.findById(id);
+        if (requestOptional.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "Movie Ticket Request case not found for ID " + id));
+        }
+
+        MovieTicketRequest caseInstance = requestOptional.get();
+        caseInstance.evaluateSLA();
+        requestRepository.save(caseInstance);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("caseId", caseInstance.getCaseId());
+        response.put("caseType", caseInstance.getCaseType() != null ? caseInstance.getCaseType() : "Movie Ticket Request");
+        response.put("goalDurationDays", caseInstance.getGoalDurationDays());
+        response.put("deadlineDurationDays", caseInstance.getDeadlineDurationDays());
+        response.put("slaGoalDate", caseInstance.getSlaGoalDate() != null ? caseInstance.getSlaGoalDate() : new Date());
+        response.put("slaDeadlineDate", caseInstance.getSlaDeadlineDate() != null ? caseInstance.getSlaDeadlineDate() : new Date());
+        response.put("slaStatus", caseInstance.getSlaStatus() != null ? caseInstance.getSlaStatus() : "WITHIN_SLA");
+        response.put("slaFlag", caseInstance.getSlaFlag() != null ? caseInstance.getSlaFlag() : "ON_TRACK");
+        response.put("priority", caseInstance.getPriority());
+        response.put("createdAt", caseInstance.getCreatedAt() != null ? caseInstance.getCreatedAt() : new Date());
+
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<?> getMovieTicketRequestById(@PathVariable Long id) {
         Optional<MovieTicketRequest> requestOptional = requestRepository.findById(id);
         if (requestOptional.isPresent()) {
-            return ResponseEntity.ok(requestOptional.get());
+            MovieTicketRequest caseInstance = requestOptional.get();
+            caseInstance.evaluateSLA();
+            return ResponseEntity.ok(caseInstance);
         }
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(Map.of("error", "Movie Ticket Request case not found for ID " + id));
@@ -161,6 +258,10 @@ public class MovieTicketRequestController {
 
     @GetMapping
     public ResponseEntity<List<MovieTicketRequest>> getAllMovieTicketRequests() {
-        return ResponseEntity.ok(requestRepository.findAll());
+        List<MovieTicketRequest> list = requestRepository.findAll();
+        for (MovieTicketRequest caseInstance : list) {
+            caseInstance.evaluateSLA();
+        }
+        return ResponseEntity.ok(list);
     }
 }
